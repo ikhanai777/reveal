@@ -1,0 +1,12 @@
+{
+  "name": "footprint-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Volume footprint charts, footprint signal provider and backtester for Binance spot markets.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "verify": "node tools/verify-live.mjs",
+    "serve": "node tools/serve.mjs"
+  }
+}
