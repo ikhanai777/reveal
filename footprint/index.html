@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="dark light" />
+<meta name="description" content="Volume footprint charts, a footprint signal provider and a backtester for Binance spot markets — entirely in the browser." />
+<title>Footprint Terminal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e18'/%3E%3Crect x='6' y='9' width='7' height='5' fill='%23e04b62'/%3E%3Crect x='6' y='16' width='7' height='5' fill='%23e04b62' opacity='.5'/%3E%3Crect x='16' y='9' width='7' height='5' fill='%2312a67c' opacity='.5'/%3E%3Crect x='16' y='16' width='7' height='5' fill='%2312a67c'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <h1>Footprint Terminal</h1>
+      <p class="brand-sub">Binance spot · volume at price · signals · backtest</p>
+    </div>
+  </div>
+
+  <div class="topbar-controls">
+    <label class="field compact">
+      <span>Symbol</span>
+      <input id="symbol" list="symbol-list" value="BTCUSDT" autocomplete="off" spellcheck="false" />
+      <datalist id="symbol-list"></datalist>
+    </label>
+
+    <label class="field compact">
+      <span>Interval</span>
+      <select id="interval">
+        <option value="1m">1m</option>
+        <option value="3m">3m</option>
+        <option value="5m" selected>5m</option>
+        <option value="15m">15m</option>
+        <option value="30m">30m</option>
+        <option value="1h">1h</option>
+        <option value="4h">4h</option>
+      </select>
+    </label>
+
+    <label class="field compact">
+      <span>Range</span>
+      <select id="range">
+        <option value="2">2 hours</option>
+        <option value="6" selected>6 hours</option>
+        <option value="12">12 hours</option>
+        <option value="24">24 hours</option>
+        <option value="48">2 days</option>
+        <option value="72">3 days</option>
+      </select>
+    </label>
+
+    <button id="load" class="btn primary">Load</button>
+    <button id="cancel" class="btn ghost" hidden>Cancel</button>
+    <button id="live" class="btn ghost" aria-pressed="false">Go live</button>
+    <button id="theme" class="btn icon" title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>
+  </div>
+</header>
+
+<div id="progress" class="progress" hidden>
+  <div class="progress-bar"><i id="progress-fill"></i></div>
+  <span id="progress-text">Loading…</span>
+</div>
+
+<main class="layout">
+  <!-- ------------------------------------------------ left: configuration -->
+  <aside class="panel side">
+    <nav class="tabs" role="tablist" aria-label="Configuration sections">
+      <button class="tab active" role="tab" data-tab="chart-tab" aria-selected="true">Chart</button>
+      <button class="tab" role="tab" data-tab="signals-tab" aria-selected="false">Signals</button>
+      <button class="tab" role="tab" data-tab="backtest-tab" aria-selected="false">Backtest</button>
+      <button class="tab" role="tab" data-tab="data-tab" aria-selected="false">Data</button>
+    </nav>
+
+    <section id="chart-tab" class="tab-panel active" role="tabpanel">
+      <h2>Footprint</h2>
+      <div id="chart-fields" class="fields"></div>
+      <h2>Display</h2>
+      <div id="display-fields" class="fields"></div>
+    </section>
+
+    <section id="signals-tab" class="tab-panel" role="tabpanel">
+      <h2>Provider</h2>
+      <div id="signal-fields" class="fields"></div>
+      <h2>Rules</h2>
+      <div id="rule-list" class="rules"></div>
+    </section>
+
+    <section id="backtest-tab" class="tab-panel" role="tabpanel">
+      <h2>Execution</h2>
+      <div id="backtest-fields" class="fields"></div>
+      <button id="run-backtest" class="btn primary wide">Run backtest</button>
+      <p class="note">
+        Signals fire on the bar close and fill on the next bar's open. When a bar contains both the
+        stop and the target, the order they were hit in is unknowable from bar data — pessimistic
+        fills assume the stop went first.
+      </p>
+    </section>
+
+    <section id="data-tab" class="tab-panel" role="tabpanel">
+      <h2>Session</h2>
+      <dl id="session-info" class="kv"></dl>
+      <h2>Cache</h2>
+      <dl id="cache-info" class="kv"></dl>
+      <div class="row">
+        <button id="clear-cache" class="btn ghost">Clear cache</button>
+        <button id="reset-settings" class="btn ghost">Reset settings</button>
+      </div>
+      <h2>Export</h2>
+      <div class="row">
+        <button id="export-trades" class="btn ghost">Trades CSV</button>
+        <button id="export-signals" class="btn ghost">Signals CSV</button>
+        <button id="export-bars" class="btn ghost">Bars CSV</button>
+      </div>
+      <p class="note">
+        Public market-data endpoints only — no API key is used, requested or stored. Cached trades
+        live in your browser's IndexedDB and never leave the machine.
+      </p>
+    </section>
+  </aside>
+
+  <!-- ----------------------------------------------------- centre: chart -->
+  <section class="panel chart-panel">
+    <div class="chart-head">
+      <div class="chart-title">
+        <strong id="chart-symbol">BTCUSDT</strong>
+        <span id="chart-meta" class="muted">no data</span>
+      </div>
+      <div class="legend" id="legend">
+        <span class="legend-item"><i class="swatch bid"></i>Bid (aggressive sell) — left</span>
+        <span class="legend-item"><i class="swatch ask"></i>Ask (aggressive buy) — right</span>
+        <span class="legend-item"><i class="swatch poc"></i>POC</span>
+        <span class="legend-item"><i class="swatch va"></i>Value area</span>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="chart" aria-label="Volume footprint chart"></canvas>
+      <div id="tooltip" class="tooltip" hidden></div>
+      <div class="hint">drag to pan · wheel to scroll · alt+wheel column width · shift+wheel row height · double-click to fit</div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------- bottom: results -->
+  <section class="panel results">
+    <nav class="tabs" role="tablist" aria-label="Result sections">
+      <button class="tab active" role="tab" data-tab="perf-tab" aria-selected="true">Performance</button>
+      <button class="tab" role="tab" data-tab="equity-tab" aria-selected="false">Equity</button>
+      <button class="tab" role="tab" data-tab="trades-tab" aria-selected="false">Trades</button>
+      <button class="tab" role="tab" data-tab="feed-tab" aria-selected="false">Signal feed</button>
+      <button class="tab" role="tab" data-tab="breakdown-tab" aria-selected="false">Breakdown</button>
+    </nav>
+
+    <div id="perf-tab" class="tab-panel active" role="tabpanel">
+      <div id="stat-grid" class="stat-grid"></div>
+      <div id="segment-stats"></div>
+    </div>
+
+    <div id="equity-tab" class="tab-panel" role="tabpanel">
+      <div class="legend" id="equity-legend"></div>
+      <div class="line-wrap"><canvas id="equity" aria-label="Equity curve"></canvas></div>
+      <div id="equity-readout" class="readout"></div>
+    </div>
+
+    <div id="trades-tab" class="tab-panel scroll" role="tabpanel">
+      <div id="trades-table"></div>
+    </div>
+
+    <div id="feed-tab" class="tab-panel scroll" role="tabpanel">
+      <div id="signal-feed"></div>
+    </div>
+
+    <div id="breakdown-tab" class="tab-panel scroll" role="tabpanel">
+      <div id="breakdown-tables"></div>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
