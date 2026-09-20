@@ -715,3 +715,14 @@ test('every registered rule has a proof that it can fire', () => {
     assert.ok(proven.has(r.id), `rule "${r.id}" has no trigger test — add one to this file`);
   }
 });
+
+test('the REST client honours a host override', async () => {
+  const { BinanceClient } = await import('../js/binance.js');
+  const custom = new BinanceClient({ hosts: ['https://mirror.example'] });
+  assert.equal(custom.host, 'https://mirror.example');
+  const def = new BinanceClient();
+  assert.match(def.host, /^https:\/\//);
+  assert.notEqual(def.host, 'https://mirror.example');
+  // An empty override must not strand the client with no hosts to try.
+  assert.match(new BinanceClient({ hosts: [] }).host, /^https:\/\//);
+});

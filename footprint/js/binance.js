@@ -64,19 +64,25 @@ class Limiter {
 }
 
 export class BinanceClient {
-  constructor({ minGapMs = 110, maxRetries = 4 } = {}) {
+  /**
+   * @param hosts  Override the REST host list — for a regional mirror or a
+   *               corporate proxy that fronts the public API. Defaults to the
+   *               public hosts above.
+   */
+  constructor({ minGapMs = 110, maxRetries = 4, hosts } = {}) {
     this.limiter = new Limiter(minGapMs);
     this.maxRetries = maxRetries;
+    this.hosts = (Array.isArray(hosts) && hosts.length) ? hosts.slice() : REST_HOSTS.slice();
     this.hostIndex = 0;
     this.usedWeight = 0;
   }
 
   get host() {
-    return REST_HOSTS[this.hostIndex];
+    return this.hosts[this.hostIndex];
   }
 
   _rotateHost() {
-    this.hostIndex = (this.hostIndex + 1) % REST_HOSTS.length;
+    this.hostIndex = (this.hostIndex + 1) % this.hosts.length;
   }
 
   async get(path, params = {}, { signal } = {}) {

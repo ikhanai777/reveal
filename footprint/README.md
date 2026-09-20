@@ -4,9 +4,52 @@ A standalone volume-footprint charting app for Binance spot markets, with a
 footprint-native signal provider and a backtester. Everything runs in the
 browser — no build step, no server, no API key.
 
-Open `index.html` over HTTP (`npx serve .`, `python3 -m http.server`, GitHub
-Pages, any static host). Opening it as a `file://` URL will not work, because
-the app is made of ES modules.
+```bash
+cd footprint
+npm run serve                      # http://localhost:8080
+npm test                           # 51 engine tests, no network needed
+npm run verify -- BTCUSDT 5m 2     # reconcile live data against the exchange
+```
+
+Node 18+ (for `fetch` and the built-in test runner). There are no dependencies
+to install.
+
+The app must be served over **HTTP** — opening `index.html` as a `file://` URL
+fails, because it is built from ES modules. Any static server works; `npm run
+serve` exists only so the repo needs nothing installed.
+
+---
+
+## Proving the data is real
+
+The app builds its bars from raw aggregated trades. Binance separately
+publishes klines computed from the same tape, so the two can be reconciled —
+which is what `npm run verify` does:
+
+```bash
+npm run verify -- BTCUSDT 5m 2
+```
+
+It fetches the real trade stream, rebuilds footprint bars, pulls Binance's own
+klines for the same window, and compares them bar by bar. The decisive check is
+`takerBuyBaseAssetVolume`: Binance publishes the aggressive-buy volume per
+kline, and this app derives the same number independently from the per-trade
+maker flag. **If those agree, the bid/ask split the entire footprint rests on
+is correct, not merely plausible.**
+
+It exits `0` on a clean reconciliation and non-zero on any discrepancy. It has
+no fixtures and no fallback data: if the exchange is unreachable it fails
+loudly rather than showing you something that looks like a market.
+
+If you are behind a proxy or a regional mirror:
+
+```bash
+BINANCE_REST_HOST=https://your-mirror npm run verify -- BTCUSDT 5m 2
+```
+
+Binance blocks some regions outright (HTTP 451). `data-api.binance.vision` is
+the public market-data mirror and is usually the most permissive host; it is
+tried first.
 
 ---
 
@@ -190,7 +233,7 @@ closes, never on the unclosed bar.
 npm test          # or: node --test "test/**/*.test.mjs"
 ```
 
-50 tests over the DOM-free half — footprint construction, indicators, the
+51 tests over the DOM-free half — footprint construction, indicators, the
 signal provider and the backtester's accounting — all against synthetic trades,
 so no network is needed. They cover:
 
@@ -227,6 +270,11 @@ js/
   linechart.js      equity curve
   ui.js             schema-driven controls and result renderers
   util.js           formatting and small helpers
+tools/
+  serve.mjs         dependency-free static server
+  verify-live.mjs   reconciles live data against the exchange's own klines
+test/
+  engine.test.mjs   51 tests over the DOM-free engine
 ```
 
 ---
